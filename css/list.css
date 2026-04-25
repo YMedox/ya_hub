@@ -1,0 +1,234 @@
+body {
+  margin: auto;
+  text-align: center;
+  padding-top: 8px;
+  background: lightgray;  
+}
+
+table {
+  border: 1px solid red; /* Рамка вокруг таблицы */
+  margin: auto; /* Выравниваем таблицу по центру окна  */
+  background-color: white;
+  border-collapse: separate;
+  border-spacing: 4px 4px;
+}
+td {
+  text-align: center; /* Выравниваем текст по центру ячейки */
+  vertical-align: middle;
+}
+.table-list table {
+  border: 1px solid green;
+}
+.table-list tr:hover td {
+   background-color: rgb(240,240,240);
+}
+.table-dev table {
+  border: 1px solid blue;
+  border-spacing: 7px 4px;
+}
+.table-dev td:first-child {
+   width: auto;
+   text-align: right;
+   color: rgb(30,30,30);
+}
+.table-dev td:last-child {
+   width: auto;
+   text-align: left;
+   color: black;
+}
+.table-dev-set {
+   height: 2px;
+   background-color: rgb(0,0,0);
+}
+
+.table-caps table {
+    border: 1px solid red;
+    background-color: white;
+    text-align: right;
+    min-width: 700px;
+    height: auto;
+}
+.table-caps textarea {
+    height: 330px;
+}
+.table-caps td {
+   border-bottom: 1px dotted lightgrey;
+}
+.table-caps tr:hover td {
+   background-color: rgb(230,200,230);
+}
+.table-caps td:first-child {
+   width: 230px;
+   text-align: right;
+   color: rgb(30,30,30);
+}
+.table-caps td:last-child {
+   width: auto;
+   text-align: left;
+}
+.table-caps input {
+  width: 100%;
+    box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+}
+.table-caps textarea {
+  width: 100%;
+    box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+}
+.table-caps button {
+   margin-left: 4px;
+}
+
+    :root {
+        --black-4: #5C555D;
+        --grey-2: #f1f1f1;
+        --teal: rgb(40 200 40);
+        --back-a: rgb(180 255 180);
+        --graphical-fg: var(--black-4);
+        --box-bg: var(--grey-2);
+        /*Inputs, buttons, etc*/
+        --control-height: 1.6rem;
+        --control-border-width: 1px;
+        --3d-highlight: color-mix(in srgb, var(--box-bg) 50%, rgba(241, 241, 241, 0.695));
+        --3d-shadow: color-mix(in srgb, var(--box-bg) 50%, rgba(0, 0, 0, 0.101));
+        /*3D buttons are mostly transparent with just some highlights and shadows.*/
+        --concave-item-bg: linear-gradient(180deg, var(--3d-shadow) 12%, var(--3d-highlight) 88%);
+        --convex-item-bg: linear-gradient(180deg, var(--3d-highlight) 0%, var(--3d-shadow) 96%);
+        --concave-item-box-shadow: inset 0px 0px 4px 2px #3838381f;
+        --control-bg: var(--grey-1);
+        --highlight-color: var(--teal);
+        --control-border-color: color-mix(in srgb, var(--graphical-fg) 35%, rgb(0 0 0 / 0%))
+    }
+    input[type='checkbox'] {
+        -webkit-appearance: none !important;
+        border-radius: 50px;
+        appearance: none;
+        background: var(--concave-item-bg);
+        box-shadow: var(--concave-item-box-shadow);
+        border: var(--control-border-width) solid var(--control-border-color);
+        height: var(--control-height);
+        width: calc(var(--control-height) * 1.77);
+        --slider-position: 0px;
+    }
+    input[type='checkbox']:checked {
+        position: relative;
+        --slider-position: calc(var(--control-height) * 0.77);
+        background: var(--back-a);    
+    }
+    input[type='checkbox']:checked::before {
+        background: var(--highlight-color);
+    }
+    input[type='checkbox']:before {
+        content: "";
+        position: relative;
+        display: inline-block;
+        box-sizing: border-box;
+        border: var(--control-border-width) solid var(--control-border-color);
+        left: var(--slider-position);
+        border-radius: 50px;
+        margin: 0px;
+        padding: 0px;
+        height: calc(var(--control-height) - calc(var(--control-border-width) *2));
+        width: calc(var(--control-height) - calc(var(--control-border-width) *2));
+        background: var(--convex-item-bg);
+        transition: left 0.25s ease, background 0.25s ease;
+    }
+
+.messagebox {
+    background-color: rgb(200,220,200);
+    border-radius: 0.6rem;
+    border: 2px solid red;
+    padding-bottom: 10px;
+    font-weight: bold;
+    min-width: 250px;
+    height: auto;
+    margin-left: 4px;    
+    margin-right: 4px;
+}
+.messagebox button {
+    margin-left: 10px;    
+    margin-right: 10px;
+}    
+
+/*
+ * WPopupMenu
+ */
+.Wt-popupmenu {
+    position: absolute;
+    display: none;
+    //background: #FAFAFA;
+    background: white;
+//    font: normal 13px/22px "Trebuchet MS", Verdana, Arial, Helvetica, sans-serif;
+    font: normal;
+//    font: normal bold 13px/1em Arial, Verdana, Helvetica;  
+    color: #515B66;
+    z-index: 200;
+    cursor: default;
+    white-space: nowrap;
+    list-style: none;
+    padding: 5px;
+    margin: 0;
+    border: 1px solid black;
+}
+
+.Wt-popupmenu li a {
+    display: block;
+    padding: 2px 10px;
+    text-decoration: none; 
+}
+
+.Wt-popupmenu .Wt-padded {
+    margin-right: 3px;
+    margin-left: 24px;
+    padding-right: 24px;
+}
+
+.Wt-popupmenu .active {
+    background: #6880A0;
+    color: white;
+}
+
+.Wt-popupmenu .Wt-disabled, .Wt-popupmenu .Wt-disable.active {
+    background: transparent;
+    color: #888;
+}
+
+.Wt-popupmenu .submenu {
+    background-image: url(../../right-arrow.gif);
+    background-repeat: no-repeat;
+    background-position: right center;
+}
+
+.Wt-popupmenu .Wt-separator {
+    border-top: 1px solid #CCCCCC;
+    border-bottom: 1px solid #DDDDDD;
+    margin: 0px 3px;
+    line-height: 0px;
+    padding: 0;
+}
+
+.Wt-popupmenu .Wt-sectheader, .Wt-popupmenu .Wt-sectheader.active {
+    background: transparent;
+    color: #888;
+}
+
+.btndrop {
+    border: none;  
+    background: transparent;
+    background-image: url("../css/suggest-dropdown.png");
+    color: blue;
+    text-decoration: underline; 
+    font-size: 16px;
+    font-family: inherit;
+    padding-left: 10px;
+    padding-right: 15px;
+    background-position: right center;
+}
+ 
+.btndrop:hover {
+    cursor: pointer;
+}
+

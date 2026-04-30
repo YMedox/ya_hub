@@ -103,7 +103,6 @@ target_include_directories(ya_hub PRIVATE
 target_compile_options(ya_hub PRIVATE
     -Wall
     -Wextra
-    -O2
     -pipe
     -march=native
     -MMD
@@ -127,7 +126,7 @@ target_compile_definitions(ya_hub
         $<$<CONFIG:Release>:__RELEASE__>
 )
 target_compile_options(ya_hub PRIVATE
-    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+    $<$<CONFIG:Release>:-O2 -DNDEBUG>
 )
 
 # Указываем библиотеки для линковки

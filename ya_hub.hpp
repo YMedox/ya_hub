@@ -108,7 +108,7 @@ RowResult runSQLStatement(std::string sql);
 std::string getSQLStringValue(std::string sql);
 int getDbFieldSize(std::string table, std::string column);
 void cleanUp();
-void manageArgv(int argc, char *argv[], const char *config_file);
+void manageArgv(int argc, char *argv[]);
 void calcMemorySize(double &vm_usage, double &resident_set);
 bool sendMail(std::string mailto, std::string subject, std::string body);
 void getMQTTDeviceState(std::string& device_id);
@@ -119,6 +119,7 @@ std::string getCurrentWorkingDirectory();
 void to_lower_russian(std::string& input);
 void trimString(std::string& input);
 void resetbCont();
+std::string timeToRussianFormat(std::time_t *time);
 
 
 #endif

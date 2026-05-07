@@ -1,21 +1,7 @@
 /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-1.9 - Добавлен таймаут в течении которого не отправляется повторно неизменившийся статус. После таймаута, отправка возможна. Функция reportDeviceStatus(). Удобно
-если  статус устройства проверяется по таймеру.
-1.10 - Исправлена ошибка отсутствия instance в описании capability. Этого ключа может и не быть в описании. И ошибка отправки пустого топика по mqtt исправлена
-1.11 - Добавлена возможность запроса устройств с помощью исполняемого файла. Данные в этом случае передаются как параметры исполняемому файлу.
-1.12 - Поле instance при запросах типа action извлекатеся из state, а не parameters.
-1.13 - Если capability/property не retrievable, то запрос query не осуществляется. Добавлен экспорт конфигураций в текстовый бэкап-файл.
-1.14/1.15 - Добавлена обработка сообщений от Salute (SaluteResource)
-1.16/1.17 - Добавлена возможность работы с Марусей (по входящим запросам только). Изменено наименование облачных провайдеров в логах.
-1.18 - Возвращаемое устройством значение публикуется для всех типов запросов, не только HTTP. Плюс косметические правки.
-1.19 - сохранение статусов сделано по облачным провайдерам, чтобы отправлять обновления раздельно, иначе при обновлениях VK не обновляются статус яндекс
-1.20 - Сделана полная отвязка от специфики сервисов, включая названия, адреса для отправки обновлений и т.д. По сути есть три типа сервисов: типа Умный дом
-       по протоколу Яндекса, умный помощник, разбирающий запросы от сервиса (сделан для Салюта), а также запросы типа signal от моих устройств на обновление статуса.
-1.21 - Добавлена обработка универсального навыка от Алисы по аналогии с Салютом.
-1.23 - Сделана авторизация по user_id для универсальных навыков Алисы. См. комментарий к AliceResource
-1.24 - Оптимизированы библиотеки. Нормализован нэйминг.
-1.25 - Исправлено хранение параметров в таймерах
-1.26 - Сделана подготовка к публикации на github
+Универсальный шлюз межуд голосовыми помощниками и умными домами или умными устройствами.
+
+Автор: Ярослав Медокс
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 #include <Wt/WApplication.h>
 #include <Wt/WServer.h>
@@ -89,6 +75,8 @@ std::string mailcmd = "";
 std::string mailto  = "";
 std::string device_to_yandex = "";
 std::string s_auxlog = "";
+/// @brief используется для хранения самого последнего изменившегося апдейта от устройства
+std::string idleRequestor = "_idleRequestor_";
 double      secondsUnchanged;
 SessionSettings *mysqlSettings = nullptr;
 const unsigned int bearerLength = 7;
@@ -245,9 +233,14 @@ class cClientIds {
         service.user_ids          = std::string(ini->getString(reader.getKey(i), (char *)"user_ids",          (char *)""));
         services.insert({std::string(reader.getKey(i)), service});
       }
+      std::string sql = "delete from statuses where requestor NOT in (";
       for(auto [id, service] : services) {
         logcppdebug<<id<<" = "<<service.requestor<<ENDL;
+        sql += "'"+service.requestor+"', " ;
       }
+      sql += "'"+idleRequestor+"')";
+      logcppwarn<<"Cleaning statuses for non-existing services."<<ENDL;
+      runSQLStatement(sql);
     }
     bool isAuthorized(std::string& client_id) {
       if(auto service=services.find(client_id); service!=services.end()) return true;
@@ -263,6 +256,7 @@ class cClientIds {
              std::string tmp;
              if (commaPos == std::string::npos) {
                 tmp = service.user_ids.substr(start);
+                start = service.user_ids.size(); // выход из цикла, даже если не нашли пользователя
              } else {
                 tmp = service.user_ids.substr(start, commaPos);
                 start = commaPos + 1;
@@ -420,6 +414,7 @@ void cleanUp() {
       mosqCleanUp();
       if(logger) delete logger;
 }
+
 
 // единая функция получения списка устройств из базы данных
 RowResult getDevicesFromDatabase(std::string order = "") {
@@ -847,6 +842,10 @@ public:
     }
   }
   bool checkUniqueId(WLineEdit *edit, const WString& text) {
+    if(edit->valueText().toUTF8() == idleRequestor) {
+      putMessage(edit, idleRequestor + " зарезервированное имя");
+      return false;
+    }
     if (!getSQLStringValue("select id_for_yandex from devices where id_for_yandex='"+edit->valueText().toUTF8()+"'").empty()) {  //нашли такой id, запрет
       putMessage(edit, text);
       return false;
@@ -932,7 +931,7 @@ public:
       if(le) {  //это новое устройство
         if(!checkValid(le, "Некорректная длина id устройства"))  { bRet = false; }
         if(!checkUniqueId(le, "Устройство с таким id уже есть")) { bRet = false; }
-        clearMessage(le);
+        if(bRet) clearMessage(le);
       }
       if(bRet && !checkJSON()) { bRet = false; }
       //прошли проверки - сохраняем
@@ -1240,6 +1239,13 @@ void cleanString(std::string& to_clean, std::string symbols) {
     do { pos = to_clean.find_first_of(symbols); if(pos != std::string::npos) to_clean.erase(pos, 1); } while (pos != std::string::npos);
 }
 
+// Просто все склеивает в одну строку без пробелов. Удобно в лог, например выводить
+std::string toOneLine(std::string& from) {
+    std::string ret = from;
+    if(ret.length() > 0) { cleanString(ret, " \n\t\r"); }
+    return ret;
+}
+
 //проверяет равенство количества открывающих и закрывающих скобок.
 bool checkParity(std::string& to_check, std::string symbol_open, std::string symbol_close) {
   size_t pos = 0, cnt = 0;
@@ -1254,8 +1260,8 @@ bool checkParity(std::string& to_check, std::string symbol_open, std::string sym
 
 //проверяет, что перед закрывающей скобкой стоит разрешенный символ, а не запятая, например.
 bool checkEndSymbols(std::string& to_check) {
-  std::string to_check_ = to_check;
-  cleanString(to_check_, " \n\t\r"); //склеиваем все в одну сплошную строку
+  std::string to_check_ = toOneLine(to_check);
+  //cleanString(to_check_, " \n\t\r"); //склеиваем все в одну сплошную строку
   if(to_check_.length() < 3) return true;
   size_t pos = to_check_.find_last_not_of("leE0123456789'\"}]{[", to_check_.length()-2);
   if(pos != std::string::npos && pos >= to_check_.length()-2){
@@ -1656,7 +1662,7 @@ bool doRequestToDevice(std::string s_device, std::string s_request, std::string 
     //logcppdebug<<"API description: "<<Json::serialize(api)<<ENDL;
     Json::Object api_end = api[s_request]; //дошли до конкретного типа запроса
     Http::Method method;
-    std::string s_method = api_end["method"];
+    std::string s_method = api_end["method"].toString();
     logcppdebug<<"API_END, "<<s_device<<", "<<capability_type<<": "<<Json::serialize(api_end)<<ENDL;
     std::string url;
     Wt::Http::Message mess;
@@ -1697,8 +1703,9 @@ bool doRequestToDevice(std::string s_device, std::string s_request, std::string 
       Json::Object headers = request["headers"];
       std::set<std::string> names = headers.names();
       for(std::string name : names) {
-        logcppdebug<<"Adding header to request "<<s_method<<": "<<name<<" = "<<std::string(headers[name])<<ENDL;
-        mess.addHeader(name, headers[name]);
+        std::string h_value = headers[name];
+        logcppdebug<<"Adding header to request "<<s_method<<": "<<name<<" = "<<h_value<<ENDL;  
+        mess.addHeader(name, h_value);
       }
       std::string addr = std::string(request["host"]) + url;
       logcppdebug<<"Device "<<s_device<<". URL formed as: "<<addr<<ENDL;
@@ -1717,7 +1724,6 @@ bool doRequestToDevice(std::string s_device, std::string s_request, std::string 
             size_t pos = resp.find("\n");
             if(pos != std::string::npos) resp = resp.substr(0, pos);
             waitForResponse.setDeviceResponse(resp);
-//            logcppinfo <<"Device "<<s_device<<". "<< s_method<< " response from the device: " << resp << ENDL;
         } else {
             logcpperror <<"Device "<<s_device<<". HTTP error: " << response.status() << ENDL;
         }
@@ -1735,7 +1741,7 @@ bool doRequestToDevice(std::string s_device, std::string s_request, std::string 
        runExec(host, mess.body());
     }
     std::string resp = waitForResponse.getDeviceResponse();
-            logcppinfo <<"Device "<<s_device<<". Method: {"<< s_method<< "}, response from the device: " << resp << ENDL;
+            logcppinfo <<"Device "<<s_device<<". Method: {"<< s_method<< "}, response from the device: " << toOneLine(resp) << ENDL;
             Json::Object api_resp = api["response"];
             if(resp.empty() && bSubscribed) { getMQTTDeviceState(s_device); } //если устройство подписанно на постоянке и не получило ответ, то берем ответ из базы
             if(resp.empty()) {
@@ -1797,16 +1803,23 @@ void saveDeviceState(std::string& device_id, Json::Object& dev, std::string& req
       RowResult res = cap.select("state")
                          .where("id_for_yandex=:i_d and requestor=:r_q")
                          .bind("i_d", device_id).bind("r_q", requestor).execute();
-      std::string now1 = getDateStringForDB();
+      std::string now1  = getDateStringForDB();
+      std::string state = Json::serialize(dev);
+      if(requestor != idleRequestor) {  //исключаем рекурсивное зацикливание
+         std::string idle_state = getSQLStringValue("select state from statuses where id_for_yandex='"+device_id+"' and requestor='"+idleRequestor+"'");
+         if(idle_state != state) {           // статус обновился
+           saveDeviceState(device_id, dev, idleRequestor);
+         }
+      }
       if(res.count()) { //будем делать апдейт
          cap.update()
-            .set("state", Json::serialize(dev))
+            .set("state", state)
             .set("updated", now1)
             .where("id_for_yandex=:i_d and requestor=:r_q")
             .bind("i_d", device_id).bind("r_q", requestor).execute();
       } else {          //будем сохранять новую запись
          cap.insert("id_for_yandex", "state", "requestor", "updated")
-            .values(device_id, Json::serialize(dev), requestor, now1).execute();
+            .values(device_id, state, requestor, now1).execute();
       }
     } catch(const mysqlx::Error &err) {
       logcpperror<<save_err<<err.what()<<ENDL;
@@ -1841,11 +1854,11 @@ void handleRequestToDevice(bool bQuery, std::string& id_for_yandex,Json::Array& 
                           targs.push_back(targ);
                           logcppdebug<<"Received state for cloud requestor: " << Json::serialize(stat)<<ENDL;
                         } else {
-                          //сформировать ответ об ошибке
+                          //сформировать отчет об ошибке
                           if(isRetrievable(cap)) errors.incError(id_for_yandex);
                         }
-                        device_resp[block] = targs;
                      }
+                     device_resp[block] = targs;
                      targs.clear();
                    }
                  }
@@ -1956,6 +1969,35 @@ void doReportRequest(Http::Client *client, Json::Object& statuses, std::string& 
     waitReport.wait(timeout);
 }
 
+// Функция определяет живо ли устройство. Но только для тех, у кого установлен параметр maxidletime
+bool checkDeviceAlive(std::string& device_id) {
+  if(!device_id.empty()) {
+    std::string s_device = getDeviceString(device_id);
+    if(!s_device.empty()) {
+      Json::Object device;
+      if(parseJsonStringToObject(s_device, device)) {
+        double maxidletime = device.get("maxidletime").orIfNull(0);  //в секундах
+        if(maxidletime == 0) return true;                            //не контролируем простой устройства.
+        std::time_t time;
+        std::string old_state = getDeviceState(device_id, idleRequestor, &time); //получаем самое (!) старое значение статуса устройства. Вернее только время нас интересует
+        std::time_t currentTime = std::time(nullptr);
+        double delta = difftime(currentTime, time);
+        if(delta > maxidletime) {
+          logcppwarn<<"Device "<<device_id<<" is dead. Last state was updated "<<timeToRussianFormat(&time)<<ENDL; //" and state is: "<<old_state
+          return false;                                              //простой устройства
+        }
+      } else {
+        logcpperror<<"Error parsing device "<<device_id<<ENDL;
+      }
+    } else {
+      logcpperror<<"Device "<<device_id<<"not found"<<ENDL;
+    }
+  } else {
+    logcpperror<<"device_id is empty"<<ENDL;
+  }  
+  return true;                                                        // во всех остальных случаях живое устройство
+}
+
 /* функция отправки статуса устройства в умный дом Яндекса или иного внешнего сервиса.
 Использует тот же механизм вызовов устройств, что и по обычным запросам от Яндекса: handleRequestToDevice
 При этом всегда опрашивается устройство целиком, а не по отдельным properties/capabilities.
@@ -1973,14 +2015,18 @@ void reportDeviceStatusToOneService(std::string& device_id, std::string& client_
    std::string old_state = getDeviceState(device_id, requestor, &time); //получаем старое значение статуса устройства.
    handleRequestToDevice(true, device_id, devices_resp, req, requestor);  //вот здесь получаем статусы от устройства и кладем их в devices_resp. Поскольку у нас одно устройство, то и в json'е будет только одно устройство
    if(devices_resp.size()) {
-     Json::Object device_resp = devices_resp[0];
+     Json::Object device_resp = devices_resp[0]; // там всегде одно устройство только
      std::string new_state = Json::serialize(device_resp);
      if(new_state == old_state) { //старый и новый статусы одинаковы
-       std::time_t currentTime = std::time(nullptr);
-       double delta = difftime(currentTime, time);
-       if(delta < secondsUnchanged) {  // и если разница во времени меньше настроенной в параметрах величины, то не отправляем повторно
-         logcppinfo<<"State of device "<<device_id<<" unchanged "<<delta<<"s. Less than allowed "<<secondsUnchanged<<"s. Skipping report for "<<requestor<<ENDL;
-         return;
+       //если устройство активно (true), то можем отправить статус. 
+       //если умерло, то не отправляем статус в сервис, чтобы в нем можно было настроить сценарии уведомления о неактивности устройства
+       if(checkDeviceAlive(device_id) == true) { 
+         std::time_t currentTime = std::time(nullptr);
+         double delta = difftime(currentTime, time);
+         if(delta < secondsUnchanged) {  // и если разница во времени меньше настроенной в параметрах величины, то не отправляем повторно
+           logcppinfo<<"State of device "<<device_id<<" unchanged "<<delta<<"s. Less than allowed "<<secondsUnchanged<<"s. Skipping report for "<<requestor<<ENDL;
+           return;
+         }
        }
      }
    } else {
@@ -2063,7 +2109,7 @@ public:
         std::istream& body = request.in();
         std::string bodyStr(std::istreambuf_iterator<char>(body), {});
         logcppdebug<<"Signal from device: "<<bodyStr<<ENDL;
-        logcppinfo<<"Signal request received from "<<es->requestor<<ENDL;
+        logcppinfo<<"Signal request received from "<<es->requestor.c_str()<<ENDL;
         Json::Object sig;
         response.setStatus(200);
         if(parseJsonStringToObject(bodyStr, sig)) {
@@ -2173,6 +2219,17 @@ void handleRequestFromVoiceAssistant(std::string bodyStr, vaData& va){
                bool bQuery = request=="query"?true:false;
                if(bQuery) {  //запрос статуса
                  handleRequestToDevice(bQuery, id_for_yandex, devices_resp, req, va.requestor);
+                 // после обработки запроса проверяем, что устройство живо. 
+                 if(checkDeviceAlive(id_for_yandex) == false) {
+                    try {
+                      Json::Object device;
+                      parseJsonStringToObject(getDeviceString(id_for_yandex), device);
+                      va.s_response = device.get("description").orIfNull("Устройство ") + " не отвечает более чем " + NumberToWords::convert(device.get("maxidletime").orIfNull(0), UnitType::NONE) + " секунд";
+                    } catch(...) {
+                      va.s_response = "Устройство давно не отвечает";
+                    }
+                    return;   //выходим из функции, ответ уже есть
+                 }
                  Json::Object resp = devices_resp[0];  //пока массив внутри цикла, в нем всегда 1 элемент
                  logcppdebug<<id_for_yandex<<" query response: "<<Json::serialize(resp)<<ENDL;
                  std::string s_state = std::string(row[4]); //текстовое описание как показывать статус
@@ -2273,7 +2330,8 @@ std::string getValueFromJson(Json::Object& obj, std::string key) {
     Json::Object tmp = obj[key];
     return tmp["value"];
   } catch(...) {
-    logcppwarn<<"Couldn't get "<<key<<" from json: "<<Json::serialize(obj)<<ENDL;
+    std::string s = Json::serialize(obj);
+    logcppwarn<<"Couldn't get "<<key<<" from json: "<<toOneLine(s)<<ENDL;
     return "";
   }
 }
@@ -2384,8 +2442,8 @@ public:
         // Читаем тело запроса (JSON)
         std::istream& body = request.in();
         std::string bodyStr(std::istreambuf_iterator<char>(body), {});
-        logcppdebug<<es->requestor<<" request: "<<bodyStr<<ENDL;
-        logcppinfo<<es->requestor<<". Request received."<<ENDL;
+        logcppdebug<<es->requestor.c_str()<<" request: "<<bodyStr<<ENDL;
+        logcppinfo<<es->requestor.c_str()<<". Request received."<<ENDL;
         vaData va;
         va.requestor = es->requestor;
         handleRequestFromVoiceAssistant(bodyStr, va);
@@ -2407,7 +2465,7 @@ void requestDevicesChangeToOneService(std::string& client_id, externalService *e
             logcpperror << "Network error: " << err.message() << ENDL;
         } else if (response.status() == 202) {
             // Успешный ответ — обрабатываем тело
-            logcppinfo<<"Request for devices discovery accepted by "<<es->requestor<<ENDL;
+            logcppinfo<<"Request for devices discovery accepted by "<<es->requestor.c_str()<<ENDL;
         } else {
             Json::Object resp;
             parseJsonStringToObject(response.body(), resp);
@@ -2417,7 +2475,7 @@ void requestDevicesChangeToOneService(std::string& client_id, externalService *e
         waitReport.allow();
     });
     //------------------------------------------------------------------------------------------------
-    logcppinfo<<"Reporting "<<es->requestor<<" that device(s) have been changed "<<device_to_yandex<<ENDL;
+    logcppinfo<<"Reporting "<<es->requestor.c_str()<<" that device(s) have been changed "<<device_to_yandex<<ENDL;
     Json::Object statuses;
     auto now = std::chrono::system_clock::now();
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() / 1000.0;
@@ -2507,7 +2565,8 @@ void setDeviceReporting() {
              topic = std::string(request.get(name));
              subscriptions.newSubscription(device_id, request["host"], topic);  //хорошо бы еще host проверять.
            } else {
-             logcpperror<<"'topic' key not defined in 'request' object for device "<<device_id<<ENDL; errors.incError(device_id);
+             logcpperror<<"'topic' key not defined in 'request' object for device "<<device_id<<ENDL; 
+             errors.incError(device_id);
            }
          }
       } else {
@@ -2581,7 +2640,7 @@ int main(int argc, char *argv[]) {
     sa.sa_handler = sigint_handler;
     sigaction(SIGINT, &sa, NULL);
 
-    manageArgv(argc, argv, config_file);
+    manageArgv(argc, argv);
     //Веб сервер можно запустить только из main(). Не разобрался почему так.
     WServer server("");
     try {

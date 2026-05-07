@@ -63,7 +63,7 @@ void cGroupReader::fillAll(cIniObject *ini, const char *group) {
   fillValues(ini, group);
 }
 bool cGroupReader::checkInd(gsize ind) {
-  if(ind >= 0 && ind < lines_) { return true; }
+  if(/*ind >= 0 && */ind < lines_) { return true; }  // gsize всегда > 0
   else {logcpperror<<"Wrong index passed: "<<ind<<ENDL; }
   return false;
 }
@@ -326,7 +326,7 @@ int manageCommand(int cmd, const char *login, const char *pass, const char *emai
 }
 
 // функция обработки аргументов программы передаваемых в командной строке
-void manageArgv(int argc, char *argv[], const char *config_file) {
+void manageArgv(int argc, char *argv[]) {
     int cmd = -1, acount = 1;
 //    char *passw = nullptr;
     user_cred = nullptr;
@@ -424,6 +424,14 @@ void calcMemorySize(double &vm_usage, double &resident_set) {
    long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024; // in case x86-64 is configured to use 2MB pages
    vm_usage     = vsize / 1024.0;
    resident_set = rss * page_size_kb;
+}
+
+// возвращает строку даты/времени из структуры time_t. 
+std::string timeToRussianFormat(std::time_t *time) {
+  std::tm* t_m = std::localtime(time);
+  char prefix[32]; 
+  sprintf(prefix, "%02d.%02d.%02d %02d:%02d:%02d", t_m->tm_mday, t_m->tm_mon+1, t_m->tm_year-100, t_m->tm_hour, t_m->tm_min, t_m->tm_sec);
+  return (std::string)prefix;
 }
 
 

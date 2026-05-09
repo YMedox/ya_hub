@@ -2224,7 +2224,7 @@ void handleRequestFromVoiceAssistant(std::string bodyStr, vaData& va){
                     try {
                       Json::Object device;
                       parseJsonStringToObject(getDeviceString(id_for_yandex), device);
-                      va.s_response = device.get("description").orIfNull("Устройство ") + " не отвечает более чем " + NumberToWords::convert(device.get("maxidletime").orIfNull(0), UnitType::NONE) + " секунд";
+                      va.s_response = device.get("description").orIfNull("Устройство ") + " не отвечает более чем " + NumberToWords::convertSecondsToTime(device.get("maxidletime").orIfNull(0));
                     } catch(...) {
                       va.s_response = "Устройство давно не отвечает";
                     }

@@ -1653,12 +1653,20 @@ bool doRequestToDevice(std::string s_device, std::string s_request, std::string 
     bool bHTTP = true;
     std::string capability_type = capability["type"];
     Json::Object tmp = device["api"];
-    Json::Array api_array = tmp[capability_type];   //дошли до собственно описания api, соответствующего типу capability/property
+    Json::Array api_array;
+    try {
+      api_array = tmp[capability_type]; //дошли до собственно описания api, соответствующего типу capability/property
+    } catch(...) {
+        logcpperror<<"Device "<<s_device<<". API description not found (or not an array) for capability type: "<<capability_type<<ENDL;
+        return false;
+    } 
     if(host.find("mqtt://") != std::string::npos) { bMQTT = true; bHTTP = false; }
     if(host.find("exec://") != std::string::npos) { bExec = true; bHTTP = false; }
+    bool bFound = false;
   for(size_t i=0;i<api_array.size();i++) { //это массив, разделяющийся по значению instance
     Json::Object api = api_array[i];
     if(!isInstance(capability, api)) continue;  //Если instance определен и не совпадает с запрошенным - пропускаем.
+    bFound = true;
     //logcppdebug<<"API description: "<<Json::serialize(api)<<ENDL;
     Json::Object api_end = api[s_request]; //дошли до конкретного типа запроса
     Http::Method method;
@@ -1771,6 +1779,10 @@ bool doRequestToDevice(std::string s_device, std::string s_request, std::string 
               logcpperror<<"Device "<<s_device<<". Request "<<s_request<<" is not supported"<<ENDL;
               return false;
             }
+  }
+  if(!bFound) {
+    logcpperror<<"Device "<<s_device<<": API for "<<capability_type<<" not found"<<ENDL;
+    return false;
   }
     return true;
 }
